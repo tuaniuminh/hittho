@@ -1,0 +1,99 @@
+name: Build & Release iOS IPA for TrollStore
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout mã nguồn
+        uses: actions/checkout@main
+
+      - name: Kiểm tra môi trường Node.js
+        run: |
+          node -v
+          npm -v
+
+      - name: Cài đặt Dependencies
+        run: npm install
+
+      - name: Build Web (Vite)
+        run: npm run build
+
+      - name: Khởi tạo & Đồng bộ Capacitor
+        run: |
+          npx cap add ios || true
+          npx cap sync ios
+
+      - name: Kích hoạt hỗ trợ màn hình 120Hz ProMotion trên iPhone / iPad
+        run: |
+          echo "Bật cờ CADisableMinimumFrameDurationOnPhone để mở khóa 120Hz ProMotion"
+          /usr/libexec/PlistBuddy -c "Add :CADisableMinimumFrameDurationOnPhone bool true" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Set :CADisableMinimumFrameDurationOnPhone true" ios/App/App/Info.plist || true
+
+      - name: Tạo Icon tự động từ Logo mới
+        run: npm run generate-icons || true
+
+      - name: Đọc và đồng bộ Version từ package.json
+        id: get_version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Cập nhật MARKETING_VERSION = $VERSION vào Xcode project"
+          sed -i '' "s/MARKETING_VERSION = .*/MARKETING_VERSION = $VERSION;/g" ios/App/App.xcodeproj/project.pbxproj
+
+      - name: Build mã nguồn iOS bằng Xcode (Không ký)
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_IDENTITY=""
+
+      - name: Ký mã giả (Ad-Hoc) với Entitlements cho TrollStore
+        run: |
+          codesign --force --sign - --deep --entitlements ios-build-entitlements.plist ios/App/build/Build/Products/Release-iphoneos/App.app
+
+      - name: Đóng gói thành file IPA chuẩn
+        run: |
+          echo "Đang đóng gói IPA phiên bản: v${{ env.APP_VERSION }}"
+          mkdir -p Payload
+          cp -r ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          
+          # Đặt tên file IPA chuẩn (Ví dụ: HitTho-v1.0.0.ipa)
+          IPA_NAME="HitTho-v${{ env.APP_VERSION }}.ipa"
+          zip -r "$IPA_NAME" Payload
+          rm -rf Payload
+          
+          echo "IPA_NAME=$IPA_NAME" >> $GITHUB_ENV
+
+      - name: Tải file IPA lên GitHub Artifacts
+        uses: actions/upload-artifact@main
+        with:
+          name: HitTho-v${{ env.APP_VERSION }}
+          path: ${{ env.IPA_NAME }}
+          retention-days: 14
+
+      - name: Tự động phát hành lên GitHub Releases (OTA In-App Update)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.APP_VERSION }}"
+          name: "hitho"
+          body: ""
+          files: ${{ env.IPA_NAME }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
