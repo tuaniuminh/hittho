@@ -2,18 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import BreathingBubble from './BreathingBubble';
 import { 
   Play, 
-  Pause, 
   RotateCcw, 
   FastForward, 
   ChevronRight, 
   Award, 
-  Flame, 
   Layers, 
-  Volume2, 
-  VolumeX, 
   CheckCircle2, 
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Gauge
 } from 'lucide-react';
 import { 
   playInhaleSound, 
@@ -40,21 +37,19 @@ import {
 } from '../services/storageService';
 
 const SPEED_TIMINGS = {
-  slow: { inhale: 2.0, exhale: 2.0 },     // 4.0s tổng
-  normal: { inhale: 1.3, exhale: 1.2 },   // 2.5s tổng
-  fast: { inhale: 1.0, exhale: 0.8 }      // 1.8s tổng
+  slow: { label: 'Chậm', inhale: 2.0, exhale: 2.0, total: 4.0 },
+  normal: { label: 'Chuẩn', inhale: 1.3, exhale: 1.2, total: 2.5 },
+  fast: { label: 'Nhanh', inhale: 1.0, exhale: 0.8, total: 1.8 }
 };
 
-const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
-  // Trạng thái buổi tập
+const Timer = ({ plan, onOpenPlans, onWorkoutStateChange, onSessionCompleted }) => {
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [phase, setPhase] = useState('idle'); // 'idle' | 'breathing' | 'retention' | 'recovery' | 'round_rest' | 'completed'
   const [breathCount, setBreathCount] = useState(0);
-  const [breathState, setBreathState] = useState('inhale'); // 'inhale' | 'exhale'
+  const [breathState, setBreathState] = useState('inhale');
   const [retentionSeconds, setRetentionSeconds] = useState(0);
   const [recoveryTimeLeft, setRecoveryTimeLeft] = useState(15);
   
-  // Dữ liệu kết quả buổi tập
   const [roundResults, setRoundResults] = useState([]);
   const [milestoneCelebrated, setMilestoneCelebrated] = useState(false);
   const [completedSummary, setCompletedSummary] = useState(null);
@@ -72,10 +67,21 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     recoveryHold: 15
   };
 
+  const [activeSpeed, setActiveSpeed] = useState(currentRoundConfig.speed || 'normal');
   const targetBreaths = currentRoundConfig.breaths || 30;
-  const speedMode = currentRoundConfig.speed || 'normal';
   const targetRetention = currentRoundConfig.targetRetention || 60;
-  const timings = SPEED_TIMINGS[speedMode] || SPEED_TIMINGS.normal;
+  const timings = SPEED_TIMINGS[activeSpeed] || SPEED_TIMINGS.normal;
+
+  // Trạng thái đang tập luyện dở dang
+  const isWorkoutActive = phase === 'breathing' || phase === 'retention' || phase === 'recovery';
+
+  useEffect(() => {
+    onWorkoutStateChange?.(isWorkoutActive);
+  }, [isWorkoutActive, onWorkoutStateChange]);
+
+  useEffect(() => {
+    setActiveSpeed(currentRoundConfig.speed || 'normal');
+  }, [currentRoundIndex, plan]);
 
   // Refs quản lý timers
   const breathTimerRef = useRef(null);
@@ -83,9 +89,9 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
   const recoveryTimerRef = useRef(null);
   const retentionStartTimestamp = useRef(null);
 
-  // Wake Lock theo dõi khi đang hoạt động
+  // Screen Wake Lock
   useEffect(() => {
-    if (phase !== 'idle' && phase !== 'completed') {
+    if (isWorkoutActive) {
       requestWakeLock();
     } else {
       releaseWakeLock();
@@ -95,9 +101,8 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
       releaseWakeLock();
       stopAlphaDrone();
     };
-  }, [phase]);
+  }, [isWorkoutActive]);
 
-  // Dọn dẹp timers khi unmount
   useEffect(() => {
     return () => {
       clearAllTimers();
@@ -111,7 +116,7 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     if (recoveryTimerRef.current) clearInterval(recoveryTimerRef.current);
   };
 
-  // ==================== 1. BẮT ĐẦU BUỔI TẬP HOẶC HIỆP TIẾP THEO ====================
+  // ==================== 1. BẮT ĐẦU BUỔI THỞ ====================
   const startSession = () => {
     triggerHapticMedium();
     clearAllTimers();
@@ -121,12 +126,11 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     scheduleBreathCycle(1, 'inhale');
   };
 
-  // ==================== 2. CHU KỲ HÍT VÀO - THỞ RA (HYPERVENTILATION) ====================
+  // ==================== 2. CHU KỲ HÍT VÀO - THỞ RA ====================
   const scheduleBreathCycle = (count, state) => {
     clearAllTimers();
 
     if (state === 'inhale') {
-      // Âm thanh và rung khi bắt đầu hít vào
       if (settings.soundEnabled) playInhaleSound(timings.inhale, settings.soundVolume);
       if (settings.hapticsEnabled) triggerBreathPeakHaptic();
 
@@ -135,16 +139,13 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
         scheduleBreathCycle(count, 'exhale');
       }, timings.inhale * 1000);
     } else {
-      // Âm thanh và rung khi thở ra
       if (settings.soundEnabled) playExhaleSound(timings.exhale, settings.soundVolume);
       if (settings.hapticsEnabled) triggerBreathPeakHaptic();
 
       breathTimerRef.current = setTimeout(() => {
         if (count >= targetBreaths) {
-          // Hoàn thành đủ số nhịp thở -> Chuyển sang Nín Thở
           startRetentionPhase();
         } else {
-          // Tiếp tục nhịp tiếp theo
           const nextCount = count + 1;
           setBreathCount(nextCount);
           setBreathState('inhale');
@@ -154,18 +155,16 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     }
   };
 
-  // ==================== 3. GIAI ĐOẠN NÍN THỞ (RETENTION PHASE) ====================
+  // ==================== 3. GIAI ĐOẠN NÍN THỞ ====================
   const startRetentionPhase = () => {
     clearAllTimers();
     setPhase('retention');
     setRetentionSeconds(0);
     setMilestoneCelebrated(false);
 
-    // Phát chuông Tây Tạng ngân vang và rung thiền sâu
     if (settings.soundEnabled) playTibetanBowl(settings.soundVolume);
     if (settings.hapticsEnabled) triggerSingingBowlHaptic();
 
-    // Bật sóng nền Alpha Drone nếu được kích hoạt
     if (settings.ambientDroneEnabled) {
       startAlphaDrone(0.18);
     }
@@ -176,7 +175,6 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
       const elapsed = Math.floor((Date.now() - retentionStartTimestamp.current) / 1000);
       setRetentionSeconds(elapsed);
 
-      // Kiểm tra đạt mốc mục tiêu của giáo án
       if (elapsed >= targetRetention && !milestoneCelebrated) {
         setMilestoneCelebrated(true);
         if (settings.soundEnabled) playMilestoneChime(settings.soundVolume);
@@ -185,15 +183,13 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     }, 250);
   };
 
-  // ==================== 4. KẾT THÚC NÍN THỞ -> PHỤC HỒI 15S (RECOVERY PHASE) ====================
+  // ==================== 4. PHỤC HỒI 15 GIÂY ====================
   const endRetentionAndStartRecovery = () => {
     clearAllTimers();
     stopAlphaDrone();
     triggerHapticMedium();
 
     const currentHoldTime = retentionSeconds;
-    
-    // Lưu kết quả của hiệp hiện tại
     const newResult = {
       roundNumber: currentRoundIndex + 1,
       breaths: breathCount,
@@ -206,7 +202,6 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     setPhase('recovery');
     setRecoveryTimeLeft(15);
 
-    // Âm thanh nhắc nhở hít vào đầy phổi
     if (settings.soundEnabled) playInhaleSound(1.6, settings.soundVolume);
 
     let timeLeft = 15;
@@ -221,7 +216,7 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     }, 1000);
   };
 
-  // ==================== 5. HOÀN THÀNH 15S PHỤC HỒI ====================
+  // ==================== 5. HOÀN THÀNH HIỆP ====================
   const handleRecoveryCompleted = (resultsSoFar) => {
     clearAllTimers();
     if (settings.soundEnabled) playRecoveryEndChime(settings.soundVolume);
@@ -230,7 +225,6 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     const isLastRound = currentRoundIndex >= rounds.length - 1;
 
     if (isLastRound) {
-      // Đã hoàn thành toàn bộ các hiệp trong giáo án
       setPhase('completed');
       
       const totalHold = resultsSoFar.reduce((acc, r) => acc + r.retentionSeconds, 0);
@@ -249,12 +243,10 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
       saveSessionHistory(summary);
       onSessionCompleted?.(summary);
     } else {
-      // Chuyển sang hiệp tiếp theo
       setPhase('round_rest');
     }
   };
 
-  // Bắt đầu hiệp tiếp theo
   const proceedToNextRound = () => {
     triggerHapticLight();
     const nextIdx = currentRoundIndex + 1;
@@ -265,7 +257,6 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
     scheduleBreathCycle(1, 'inhale');
   };
 
-  // Đặt lại buổi tập
   const resetSession = () => {
     triggerHapticLight();
     clearAllTimers();
@@ -285,91 +276,112 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-between w-full h-full max-w-md mx-auto px-4 py-2 select-none">
+    <div className="flex flex-col items-center justify-between w-full h-full max-w-md mx-auto px-4 py-3 select-none">
       
-      {/* 1. THANH CHỈ BÁO GIÁO ÁN & TIẾN ĐỘ HIỆP */}
-      <div className="w-full flex items-center justify-between pt-2 pb-1">
+      {/* 1. THANH CHỈ BÁO GIÁO ÁN & HIỆP */}
+      <div className="w-full flex items-center justify-between">
         <button
-          onClick={() => { triggerHapticLight(); onOpenPlanManager?.(); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-950/40 border border-cyan-500/20 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/40 active:scale-95 transition-all"
+          onClick={() => { triggerHapticLight(); onOpenPlans?.(); }}
+          disabled={isWorkoutActive}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border transition-all ${
+            isWorkoutActive
+              ? 'opacity-60 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-transparent text-slate-400'
+              : 'bg-white dark:bg-cyan-950/40 border-slate-200 dark:border-cyan-500/20 text-slate-800 dark:text-cyan-300 shadow-sm active:scale-95'
+          }`}
         >
-          <Layers className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="truncate max-w-[130px]">{plan.name}</span>
-          <ChevronRight className="w-3 h-3 text-cyan-400/60" />
+          <Layers className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+          <span className="text-xs font-bold truncate max-w-[140px]">{plan.name}</span>
+          <ChevronRight className="w-3 h-3 text-slate-400 dark:text-cyan-400/60" />
         </button>
 
-        {/* Chỉ báo hiệp (Ví dụ: Hiệp 2 / 3) */}
-        <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-mono font-bold text-white">
-          <span className="text-cyan-400">Hiệp {currentRoundIndex + 1}</span>
-          <span className="text-slate-500">/</span>
+        {/* Chỉ báo hiệp */}
+        <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-white shadow-sm">
+          <span className="text-cyan-600 dark:text-cyan-400">Hiệp {currentRoundIndex + 1}</span>
+          <span className="text-slate-400">/</span>
           <span>{rounds.length}</span>
         </div>
       </div>
 
-      {/* 2. KHU VỰC TRUNG TÂM: QUẢ CẦU THỞ & ĐỒNG HỒ */}
+      {/* 2. CHỌN TỐC ĐỘ THỞ (KHI Ở TRẠNG THÁI IDLE) */}
+      {phase === 'idle' && (
+        <div className="w-full flex items-center justify-center gap-1.5 pt-1">
+          <div className="flex items-center p-1 rounded-2xl bg-white dark:bg-darkCard border border-slate-200 dark:border-white/5 shadow-sm">
+            {Object.keys(SPEED_TIMINGS).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => { triggerHapticLight(); setActiveSpeed(mode); }}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  activeSpeed === mode
+                    ? 'bg-cyan-500 text-white dark:text-black shadow-sm dark:shadow-ice-glow'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                }`}
+              >
+                {SPEED_TIMINGS[mode].label} ({SPEED_TIMINGS[mode].total}s)
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. VÙNG TRUNG TÂM: QUẢ CẦU THỞ HOẶC KẾT QUẢ */}
       <div className="flex-1 flex flex-col items-center justify-center my-auto py-2">
-        
-        {/* Trường hợp: Đã hoàn thành toàn bộ buổi tập */}
         {phase === 'completed' && completedSummary ? (
-          <div className="w-full max-w-sm p-6 rounded-3xl bg-[#080d14] border border-cyan-500/30 shadow-ice-glow text-center space-y-5 animate-fade-in">
-            <div className="w-14 h-14 mx-auto rounded-full bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-black shadow-ice-glow">
+          <div className="w-full max-w-sm p-6 rounded-3xl bg-white dark:bg-[#080d14] border border-slate-200 dark:border-cyan-500/30 shadow-xl dark:shadow-ice-glow text-center space-y-5 animate-fade-in">
+            <div className="w-14 h-14 mx-auto rounded-full bg-gradient-to-tr from-cyan-500 to-teal-400 flex items-center justify-center text-white dark:text-black shadow-md">
               <Sparkles className="w-7 h-7" />
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-xl font-bold text-white">Hoàn Thành Xuất Sắc!</h3>
-              <p className="text-xs text-cyan-300/70">Bạn vừa nạp tràn ngập sinh khí và oxy cho cơ thể</p>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Hoàn Thành Xuất Sắc!</h3>
+              <p className="text-xs text-slate-500 dark:text-cyan-300/70">Cơ thể bạn vừa được nạp tràn đầy oxy và sinh lực</p>
             </div>
 
-            {/* Thống kê từng hiệp */}
-            <div className="space-y-2 text-left bg-black/40 p-3.5 rounded-2xl border border-white/5">
-              <span className="block text-[11px] font-semibold text-cyan-400 uppercase tracking-wider mb-1">
+            <div className="space-y-2 text-left bg-slate-50 dark:bg-black/40 p-3.5 rounded-2xl border border-slate-200 dark:border-white/5">
+              <span className="block text-[11px] font-bold text-cyan-700 dark:text-cyan-400 uppercase tracking-wider mb-1">
                 Chi Tiết Nín Thở Từng Hiệp:
               </span>
               {completedSummary.roundDetails.map((r) => (
-                <div key={r.roundNumber} className="flex justify-between items-center text-xs font-mono py-1 border-b border-white/5 last:border-0">
-                  <span className="text-slate-300">Hiệp {r.roundNumber} ({r.breaths} nhịp)</span>
+                <div key={r.roundNumber} className="flex justify-between items-center text-xs font-mono py-1 border-b border-slate-200 dark:border-white/5 last:border-0">
+                  <span className="text-slate-700 dark:text-slate-300">Hiệp {r.roundNumber} ({r.breaths} nhịp)</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-cyan-300">{formatSeconds(r.retentionSeconds)}</span>
-                    <span className="text-[10px] text-slate-500">(Mục tiêu: {formatSeconds(r.targetRetention)})</span>
+                    <span className="font-bold text-cyan-600 dark:text-cyan-300">{formatSeconds(r.retentionSeconds)}</span>
+                    <span className="text-[10px] text-slate-400">(Mục tiêu: {formatSeconds(r.targetRetention)})</span>
                     {r.retentionSeconds >= r.targetRetention && (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                     )}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="pt-1">
-              <button
-                onClick={resetSession}
-                className="w-full py-3.5 rounded-2xl bg-cyan-400 text-black font-bold text-sm tracking-wide shadow-ice-glow hover:brightness-110 active:scale-[0.98] transition-all"
-              >
-                Hoàn Thành Buổi Tập
-              </button>
-            </div>
+            <button
+              onClick={resetSession}
+              className="w-full py-3.5 rounded-2xl bg-cyan-500 text-white dark:text-black font-bold text-sm tracking-wide shadow-md hover:brightness-105 active:scale-[0.98] transition-all"
+            >
+              Hoàn Thành Buổi Tập
+            </button>
           </div>
         ) : phase === 'round_rest' ? (
-          /* Nghỉ giữa 2 hiệp */
-          <div className="w-full max-w-sm p-6 rounded-3xl bg-[#080d14] border border-cyan-500/20 text-center space-y-4 animate-fade-in">
-            <div className="w-12 h-12 mx-auto rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+          <div className="w-full max-w-sm p-6 rounded-3xl bg-white dark:bg-[#080d14] border border-slate-200 dark:border-cyan-500/20 shadow-xl text-center space-y-4 animate-fade-in">
+            <div className="w-12 h-12 mx-auto rounded-full bg-cyan-100 dark:bg-cyan-500/10 flex items-center justify-center text-cyan-600 dark:text-cyan-400">
               <Award className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-lg font-bold text-white">Hiệp {currentRoundIndex + 1} Hoàn Thành!</h3>
-              <p className="text-xs text-slate-400">Thời gian nín thở: <span className="font-mono text-cyan-300 font-bold">{formatSeconds(roundResults[roundResults.length - 1]?.retentionSeconds || 0)}</span></p>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Hiệp {currentRoundIndex + 1} Hoàn Thành!</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Thời gian nín thở: <span className="font-mono text-cyan-600 dark:text-cyan-300 font-bold">{formatSeconds(roundResults[roundResults.length - 1]?.retentionSeconds || 0)}</span>
+              </p>
             </div>
-            <p className="text-xs text-cyan-300/70 italic">Thả lỏng cơ thể, uống một ngụm nước ấm nếu cần trước khi sang hiệp tiếp theo.</p>
+            <p className="text-xs text-slate-500 dark:text-cyan-300/70 italic">Thả lỏng cơ thể trước khi bắt đầu hiệp tiếp theo.</p>
             <button
               onClick={proceedToNextRound}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-teal-500 text-black font-bold text-sm tracking-wide shadow-ice-glow hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-teal-500 text-white dark:text-black font-bold text-sm tracking-wide shadow-md hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <span>Vào Hiệp {currentRoundIndex + 2}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         ) : (
-          /* Quả Cầu Thở Tương Tác Chính */
           <BreathingBubble
             phase={phase}
             breathState={breathState}
@@ -386,15 +398,15 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
         )}
       </div>
 
-      {/* 3. KHU VỰC ĐIỀU KHIỂN DƯỚI CÙNG (ERGONOMIC CONTROLS) */}
-      <div className="w-full pb-3 space-y-2">
+      {/* 4. KHU VỰC ĐIỀU KHIỂN DƯỚI CÙNG (ERGONOMIC BUTTONS) */}
+      <div className="w-full pb-20 space-y-2">
         {phase === 'idle' && (
           <button
             onClick={startSession}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-400 text-black font-bold text-base tracking-wider uppercase shadow-ice-glow hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-500 text-white dark:text-black font-extrabold text-base tracking-wider uppercase shadow-lg dark:shadow-ice-glow hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <Play className="w-5 h-5 fill-current" />
-            <span>Bắt Đầu Buổi Thở</span>
+            <span>Bắt Đầu Luyện Thở</span>
           </button>
         )}
 
@@ -405,14 +417,14 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
                 triggerHapticLight();
                 startRetentionPhase();
               }}
-              className="flex-1 py-3.5 rounded-2xl bg-cyan-950/70 border border-cyan-400/40 text-cyan-200 font-semibold text-sm hover:bg-cyan-900/60 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 rounded-2xl bg-cyan-50 dark:bg-cyan-950/70 border border-cyan-300 dark:border-cyan-400/40 text-cyan-800 dark:text-cyan-200 font-bold text-sm hover:brightness-105 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm"
             >
-              <FastForward className="w-4 h-4 text-cyan-400" />
+              <FastForward className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
               <span>Đã Đủ Oxy • Nín Thở Ngay</span>
             </button>
             <button
               onClick={resetSession}
-              className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-slate-400 hover:text-white active:scale-95 transition-all"
+              className="p-3.5 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-red-500 active:scale-95 transition-all shadow-sm"
               title="Dừng & Làm lại"
             >
               <RotateCcw className="w-4 h-4" />
@@ -424,18 +436,18 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
           <div className="space-y-2">
             <button
               onClick={endRetentionAndStartRecovery}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 text-black font-extrabold text-base tracking-wider uppercase shadow-ice-glow-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 text-white dark:text-black font-extrabold text-base tracking-wider uppercase shadow-xl dark:shadow-ice-glow-lg hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <span>HẾT KHẢ NĂNG • HÍT VÀO</span>
             </button>
-            <div className="text-center text-[11px] text-cyan-300/60 font-mono">
+            <div className="text-center text-[11px] text-slate-500 dark:text-cyan-300/60 font-mono">
               Thả lỏng tâm trí • Lắng nghe nhịp tim & cơ thể
             </div>
           </div>
         )}
 
         {phase === 'recovery' && (
-          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/30 text-center text-xs text-amber-200 font-semibold animate-pulse">
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 text-center text-xs text-amber-800 dark:text-amber-200 font-bold animate-pulse">
             Giữ hơi thở căng đầy lồng ngực trong 15 giây...
           </div>
         )}
@@ -445,4 +457,4 @@ const WimHofTimer = ({ plan, onOpenPlanManager, onSessionCompleted }) => {
   );
 };
 
-export default WimHofTimer;
+export default Timer;

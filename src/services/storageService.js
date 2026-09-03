@@ -104,6 +104,12 @@ export const setActivePlanId = (planId) => {
   localStorage.setItem(STORAGE_KEYS.ACTIVE_PLAN_ID, planId);
 };
 
+export const saveActivePlan = (plan) => {
+  if (plan && plan.id) {
+    setActivePlanId(plan.id);
+  }
+};
+
 export const saveCustomPlan = (planData) => {
   const custom = getCustomPlans();
   const planId = planData.id || `custom_${Date.now()}`;
@@ -133,7 +139,6 @@ export const deleteCustomPlan = (planId) => {
   custom = custom.filter(p => p.id !== planId);
   localStorage.setItem(STORAGE_KEYS.CUSTOM_PLANS, JSON.stringify(custom));
 
-  // Nếu giáo án đang kích hoạt bị xóa, quay về giáo án mặc định
   if (localStorage.getItem(STORAGE_KEYS.ACTIVE_PLAN_ID) === planId) {
     setActivePlanId('plan_beginner');
   }
@@ -141,6 +146,7 @@ export const deleteCustomPlan = (planId) => {
 
 // ==================== 3. CÀI ĐẶT ỨNG DỤNG ====================
 export const DEFAULT_SETTINGS = {
+  theme: 'dark', // 'dark' | 'light'
   soundEnabled: true,
   soundVolume: 0.85,
   hapticsEnabled: true,
@@ -164,7 +170,64 @@ export const saveSettings = (newSettings) => {
   return merged;
 };
 
-// ==================== 4. LỊCH SỬ TẬP & CHUỖI STREAK ====================
+// ==================== 4. LỊCH SỬ TẬP & HUY HIỆU ====================
+export const BADGES_LIST = [
+  {
+    id: 'first_breath',
+    name: 'Khởi Đầu Tĩnh Lặng',
+    desc: 'Hoàn thành buổi luyện thở đầu tiên',
+    icon: '🫁',
+    rarity: 'Cơ bản',
+    color: 'emerald',
+    check: (stats, history) => history.length >= 1
+  },
+  {
+    id: 'hold_60s',
+    name: 'Chạm Ngưỡng 1 Phút',
+    desc: 'Đạt thời gian nín thở trên 60 giây',
+    icon: '⏱️',
+    rarity: 'Cơ bản',
+    color: 'cyan',
+    check: (stats) => (stats.personalBestSeconds || 0) >= 60
+  },
+  {
+    id: 'hold_120s',
+    name: 'Kiểm Soát Nhịp Tim',
+    desc: 'Đạt thời gian nín thở trên 2 phút (120s)',
+    icon: '💎',
+    rarity: 'Hiếm',
+    color: 'blue',
+    check: (stats) => (stats.personalBestSeconds || 0) >= 120
+  },
+  {
+    id: 'hold_180s',
+    name: 'Băng Giá Thượng Thừa',
+    desc: 'Vượt qua mốc nín thở 3 phút (180s)',
+    icon: '❄️',
+    rarity: 'Sử thi',
+    color: 'amber',
+    check: (stats) => (stats.personalBestSeconds || 0) >= 180
+  },
+  {
+    id: 'streak_3',
+    name: 'Kiên Trì 3 Ngày',
+    desc: 'Luyện thở liên tục 3 ngày',
+    icon: '🔥',
+    rarity: 'Cơ bản',
+    color: 'emerald',
+    check: (stats) => (stats.streakDays || 0) >= 3
+  },
+  {
+    id: 'streak_7',
+    name: 'Kỷ Luật Băng Thép',
+    desc: 'Duy trì chuỗi thở 7 ngày liên tiếp',
+    icon: '⚡',
+    rarity: 'Huyền thoại',
+    color: 'purple',
+    check: (stats) => (stats.streakDays || 0) >= 7
+  }
+];
+
 export const getHistory = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.HISTORY);
@@ -200,11 +263,9 @@ export const saveSessionHistory = (sessionData) => {
   };
 
   history.unshift(sessionEntry);
-  // Giữ tối đa 100 buổi gần nhất
   if (history.length > 100) history.pop();
   localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
 
-  // Cập nhật thống kê và Streak
   const todayStr = new Date().toDateString();
   const lastDateStr = stats.lastWorkoutDate ? new Date(stats.lastWorkoutDate).toDateString() : null;
 
@@ -235,4 +296,16 @@ export const saveSessionHistory = (sessionData) => {
 
   localStorage.setItem(STORAGE_KEYS.USER_STATS, JSON.stringify(updatedStats));
   return { history, stats: updatedStats };
+};
+
+export const deleteHistoryItem = (sessionId) => {
+  let history = getHistory();
+  history = history.filter(h => h.id !== sessionId);
+  localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+  return history;
+};
+
+export const clearHistory = () => {
+  localStorage.removeItem(STORAGE_KEYS.HISTORY);
+  localStorage.removeItem(STORAGE_KEYS.USER_STATS);
 };

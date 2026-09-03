@@ -13,11 +13,10 @@
   html, body {
     @apply h-full w-full overflow-hidden;
     -webkit-overflow-scrolling: touch;
-    background-color: #000000;
   }
 
   body {
-    @apply bg-oled text-white antialiased select-none;
+    @apply bg-slate-100 text-slate-900 dark:bg-oled dark:text-white antialiased select-none transition-colors duration-300;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
     -webkit-font-smoothing: antialiased;
@@ -39,26 +38,32 @@
 
 /* Zen Glassmorphism Styling */
 .glass-panel {
-  background: rgba(8, 12, 18, 0.75);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
   transform: translateZ(0); /* 120Hz ProMotion Hardware Acceleration */
 }
 
-.glass-card {
-  background: rgba(14, 22, 33, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(34, 211, 238, 0.12);
+.dark .glass-panel {
+  background: rgba(8, 12, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.6);
 }
 
-.glass-card-amber {
-  background: rgba(30, 20, 10, 0.55);
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.dark .glass-card {
+  background: rgba(14, 22, 33, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
 }
 
 /* Ẩn hoàn toàn thanh cuộn */

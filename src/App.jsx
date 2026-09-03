@@ -1,38 +1,110 @@
-import React, { useState, useEffect } from 'react';
-import WimHofTimer from './components/WimHofTimer';
-import PlanManagerModal from './components/PlanManagerModal';
-import HistoryModal from './components/HistoryModal';
-import SettingsModal from './components/SettingsModal';
+import React, { useState, useEffect, useRef } from 'react';
+import Header from './components/Header';
+import Timer from './components/Timer';
+import PlanManager from './components/PlanManager';
+import History from './components/History';
+import Settings from './components/Settings';
 import { 
-  Flame, 
-  Trophy, 
-  Settings as SettingsIcon, 
-  Wind,
-  Layers
-} from 'lucide-react';
-import { 
+  getSettings, 
+  saveSettings, 
   getActivePlan, 
-  getUserStats, 
-  getSettings 
+  saveActivePlan, 
+  getUserStats 
 } from './services/storageService';
-import { attachGlobalButtonHaptics, triggerHapticLight } from './utils/hapticsUtils';
+import { 
+  attachGlobalButtonHaptics, 
+  triggerHapticWarning, 
+  triggerHapticLight 
+} from './utils/hapticsUtils';
+import { 
+  Wind, 
+  ClipboardList, 
+  Trophy, 
+  Settings as SettingsIcon 
+} from 'lucide-react';
+import { StatusBar, Style } from '@capacitor/status-bar';
 
 function App() {
-  const [activePlan, setActivePlan] = useState(getActivePlan());
+  const [activeTab, setActiveTab] = useState('timer'); // 'timer' | 'plans' | 'history' | 'settings'
+  const [settings, setSettingsState] = useState(getSettings());
+  const [currentPlan, setCurrentPlan] = useState(getActivePlan());
   const [userStats, setUserStats] = useState(getUserStats());
-  const [settings, setSettings] = useState(getSettings());
+  const [isWorkoutActive, setIsWorkoutActive] = useState(false);
+  const mainContentRef = useRef(null);
 
-  // Trạng thái mở Modals
-  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  // Cuộn lên đầu trang mỗi khi chuyển tab
+  useEffect(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTop = 0;
+    }
+  }, [activeTab]);
 
+  // Thiết lập phản hồi rung toàn cục và đồng bộ giao diện Dark / Light Mode
   useEffect(() => {
     attachGlobalButtonHaptics();
-  }, []);
 
-  const handlePlanSelected = (plan) => {
-    setActivePlan(plan);
+    const root = document.documentElement;
+    const isDark = settings.theme === 'dark';
+
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+
+    // Đồng bộ màu thanh trạng thái (Status Bar) iOS / Web
+    const syncStatusBar = async () => {
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', isDark ? '#000000' : '#ffffff');
+      }
+
+      const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (statusBarMeta) {
+        statusBarMeta.setAttribute('content', isDark ? 'black-translucent' : 'default');
+      }
+
+      try {
+        if (StatusBar && typeof StatusBar.setStyle === 'function') {
+          await StatusBar.setStyle({
+            style: isDark ? Style.Dark : Style.Light
+          });
+        }
+      } catch (e) {}
+    };
+
+    syncStatusBar();
+  }, [settings.theme]);
+
+  const handleUpdateSettings = (newSettings) => {
+    setSettingsState(newSettings);
+    saveSettings(newSettings);
+  };
+
+  const handleToggleTheme = () => {
+    triggerHapticLight();
+    const newTheme = settings.theme === 'dark' ? 'light' : 'dark';
+    handleUpdateSettings({ ...settings, theme: newTheme });
+  };
+
+  const handleToggleVoice = () => {
+    triggerHapticLight();
+    handleUpdateSettings({ ...settings, soundEnabled: !settings.soundEnabled });
+  };
+
+  const handleSelectPlan = (newPlan) => {
+    setCurrentPlan(newPlan);
+    saveActivePlan(newPlan);
+    setActiveTab('timer'); // Chuyển thẳng sang Tab Luyện Thở để bắt đầu
+  };
+
+  const handleTabChange = (tabId) => {
+    if (isWorkoutActive && tabId !== 'timer') {
+      triggerHapticWarning();
+      return;
+    }
+    triggerHapticLight();
+    setActiveTab(tabId);
   };
 
   const handleSessionCompleted = () => {
@@ -40,84 +112,121 @@ function App() {
   };
 
   return (
-    <div className="relative flex flex-col justify-between w-full h-screen overflow-hidden bg-oled text-white safe-top-padding safe-bottom-padding">
+    <div className="h-screen w-screen flex flex-col bg-slate-100 dark:bg-oled text-slate-900 dark:text-white overflow-hidden font-sans transition-colors duration-300">
       
-      {/* 1. HEADER KÍNH MỜ (TOP NAVIGATION BAR) */}
-      <header className="relative z-20 flex items-center justify-between px-4 py-2 border-b border-white/5 bg-black/40 backdrop-blur-md">
-        
-        {/* LOGO & APP TITLE */}
-        <div className="flex items-center space-x-2">
-          <div className="p-1.5 rounded-xl bg-gradient-to-tr from-cyan-500 to-teal-400 text-black shadow-ice-glow">
-            <Wind className="w-4 h-4 stroke-[2.5]" />
-          </div>
-          <div>
-            <span className="text-sm font-extrabold tracking-wider bg-gradient-to-r from-white via-cyan-100 to-cyan-400 bg-clip-text text-transparent">
-              HÍT THỞ
-            </span>
-            <span className="block text-[9px] text-cyan-300/60 tracking-widest font-mono uppercase">
-              WIM HOF METHOD
-            </span>
-          </div>
-        </div>
+      {/* 1. HEADER CỐ ĐỊNH CÓ SAFE AREA */}
+      <Header 
+        settings={settings}
+        onToggleTheme={handleToggleTheme}
+        onToggleVoice={handleToggleVoice}
+        activePlan={currentPlan}
+        streakDays={userStats.streakDays || 0}
+      />
 
-        {/* RIGHT ACTIONS: STREAK, HISTORY, SETTINGS */}
-        <div className="flex items-center space-x-1.5">
-          {/* Nút Chuỗi Ngày Streak */}
-          <button
-            onClick={() => { triggerHapticLight(); setIsHistoryModalOpen(true); }}
-            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-mono font-bold hover:bg-amber-500/20 active:scale-95 transition-all"
-            title="Chuỗi ngày tập liên tục"
-          >
-            <Flame className="w-3.5 h-3.5 fill-current text-amber-400 animate-pulse" />
-            <span>{userStats.streakDays || 0}</span>
-          </button>
+      {/* 2. NỘI DUNG 4 TABS CHÍNH */}
+      <main 
+        ref={mainContentRef} 
+        className={`flex-1 relative ${activeTab === 'timer' ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'}`}
+      >
+        {activeTab === 'timer' && (
+          <Timer 
+            plan={currentPlan}
+            onOpenPlans={() => setActiveTab('plans')}
+            onWorkoutStateChange={setIsWorkoutActive}
+            onSessionCompleted={handleSessionCompleted}
+          />
+        )}
 
-          {/* Nút Lịch Sử & Thành Tích */}
-          <button
-            onClick={() => { triggerHapticLight(); setIsHistoryModalOpen(true); }}
-            className="p-2 rounded-full text-slate-400 hover:text-cyan-300 hover:bg-white/5 active:scale-95 transition-all"
-            title="Lịch sử luyện tập"
-          >
-            <Trophy className="w-4 h-4" />
-          </button>
+        {activeTab === 'plans' && (
+          <PlanManager 
+            onSelectPlan={handleSelectPlan}
+          />
+        )}
 
-          {/* Nút Cài Đặt & Cập Nhật */}
-          <button
-            onClick={() => { triggerHapticLight(); setIsSettingsModalOpen(true); }}
-            className="p-2 rounded-full text-slate-400 hover:text-cyan-300 hover:bg-white/5 active:scale-95 transition-all"
-            title="Cài đặt & Cập nhật OTA"
-          >
-            <SettingsIcon className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
+        {activeTab === 'history' && (
+          <History 
+            onStartWorkout={() => setActiveTab('timer')}
+          />
+        )}
 
-      {/* 2. KHU VỰC LUYỆN THỞ TRUNG TÂM */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center overflow-hidden">
-        <WimHofTimer
-          plan={activePlan}
-          onOpenPlanManager={() => setIsPlanModalOpen(true)}
-          onSessionCompleted={handleSessionCompleted}
-        />
+        {activeTab === 'settings' && (
+          <Settings 
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+          />
+        )}
       </main>
 
-      {/* 3. MODALS */}
-      <PlanManagerModal
-        isOpen={isPlanModalOpen}
-        onClose={() => setIsPlanModalOpen(false)}
-        onPlanSelected={handlePlanSelected}
-      />
+      {/* 3. BOTTOM NAVIGATION BAR (4 TABS) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-oled/95 backdrop-blur-2xl border-t border-slate-200 dark:border-white/5 safe-bottom-padding px-6 pt-2 transition-colors duration-300">
+        <div className="flex items-center justify-around max-w-md mx-auto">
+          
+          {/* Tab 1: Luyện Thở (Cyan / Ice) */}
+          <button
+            onClick={() => handleTabChange('timer')}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all duration-300 ${
+              activeTab === 'timer'
+                ? 'text-cyan-600 dark:text-cyan-400 scale-105 font-black'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            <Wind size={22} className={activeTab === 'timer' ? 'stroke-[2.5]' : 'stroke-2'} />
+            <span className="text-[10px] tracking-tight mt-1 font-bold">Luyện Thở</span>
+          </button>
 
-      <HistoryModal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-      />
+          {/* Tab 2: Giáo Án (Teal / Blue) */}
+          <button
+            onClick={() => handleTabChange('plans')}
+            disabled={isWorkoutActive}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all duration-300 ${
+              isWorkoutActive
+                ? 'opacity-25 cursor-not-allowed text-slate-400 dark:text-slate-600'
+                : activeTab === 'plans'
+                ? 'text-teal-600 dark:text-teal-400 scale-105 font-black'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+            title={isWorkoutActive ? "Hãy kết thúc hoặc dừng buổi thở trước khi chuyển tab" : "Giáo Án"}
+          >
+            <ClipboardList size={22} className={activeTab === 'plans' ? 'stroke-[2.5]' : 'stroke-2'} />
+            <span className="text-[10px] tracking-tight mt-1 font-bold">Giáo Án</span>
+          </button>
 
-      <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        onSettingsUpdated={(newSettings) => setSettings(newSettings)}
-      />
+          {/* Tab 3: Thành Tích (Amber Gold) */}
+          <button
+            onClick={() => handleTabChange('history')}
+            disabled={isWorkoutActive}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all duration-300 ${
+              isWorkoutActive
+                ? 'opacity-25 cursor-not-allowed text-slate-400 dark:text-slate-600'
+                : activeTab === 'history'
+                ? 'text-amber-500 dark:text-amber-400 scale-105 font-black'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+            title={isWorkoutActive ? "Hãy kết thúc hoặc dừng buổi thở trước khi chuyển tab" : "Thành Tích"}
+          >
+            <Trophy size={22} className={activeTab === 'history' ? 'stroke-[2.5]' : 'stroke-2'} />
+            <span className="text-[10px] tracking-tight mt-1 font-bold">Thành Tích</span>
+          </button>
+
+          {/* Tab 4: Cài Đặt (Purple) */}
+          <button
+            onClick={() => handleTabChange('settings')}
+            disabled={isWorkoutActive}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all duration-300 ${
+              isWorkoutActive
+                ? 'opacity-25 cursor-not-allowed text-slate-400 dark:text-slate-600'
+                : activeTab === 'settings'
+                ? 'text-purple-600 dark:text-purple-400 scale-105 font-black'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+            title={isWorkoutActive ? "Hãy kết thúc hoặc dừng buổi thở trước khi chuyển tab" : "Cài Đặt"}
+          >
+            <SettingsIcon size={22} className={activeTab === 'settings' ? 'stroke-[2.5]' : 'stroke-2'} />
+            <span className="text-[10px] tracking-tight mt-1 font-bold">Cài Đặt</span>
+          </button>
+
+        </div>
+      </nav>
 
     </div>
   );
