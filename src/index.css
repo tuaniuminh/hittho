@@ -110,5 +110,26 @@
 
 @keyframes rippleWave {
   0% { transform: scale(0.85); opacity: 0.7; }
-  100% { transform: scale(1.3); opacity: 0; }
+  100% { transform: scale(1.35); opacity: 0; }
 }
+
+@keyframes slowCelestialSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes reverseCelestialSpin {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes starPulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; filter: drop-shadow(0 0 3px currentColor); }
+  50% { transform: scale(1.4); opacity: 1; filter: drop-shadow(0 0 8px currentColor); }
+}
+
+@keyframes floatGentle {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-4px) scale(1.02); }
+}
+

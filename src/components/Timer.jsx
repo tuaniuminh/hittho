@@ -398,34 +398,35 @@ const Timer = ({ plan, onOpenPlans, onWorkoutStateChange, onSessionCompleted }) 
         )}
       </div>
 
-      {/* 4. KHU VỰC ĐIỀU KHIỂN DƯỚI CÙNG (ERGONOMIC BUTTONS) */}
-      <div className="w-full pb-20 space-y-2">
+      {/* 4. KHU VỰC ĐIỀU KHIỂN DƯỚI CÙNG (ARTISTIC ERGONOMIC CONTROLS) */}
+      <div className="w-full pb-20 space-y-2.5">
         {phase === 'idle' && (
           <button
             onClick={startSession}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-500 text-white dark:text-black font-extrabold text-base tracking-wider uppercase shadow-lg dark:shadow-ice-glow hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="relative group w-full py-4 rounded-3xl bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-500 text-white dark:text-black font-black text-base tracking-widest uppercase shadow-xl dark:shadow-ice-glow hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 overflow-hidden"
           >
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 pointer-events-none" />
             <Play className="w-5 h-5 fill-current" />
-            <span>Bắt Đầu Luyện Thở</span>
+            <span>Khởi Động Hơi Thở</span>
           </button>
         )}
 
         {phase === 'breathing' && (
-          <div className="flex gap-2">
+          <div className="flex gap-2.5">
             <button
               onClick={() => {
                 triggerHapticLight();
                 startRetentionPhase();
               }}
-              className="flex-1 py-3.5 rounded-2xl bg-cyan-50 dark:bg-cyan-950/70 border border-cyan-300 dark:border-cyan-400/40 text-cyan-800 dark:text-cyan-200 font-bold text-sm hover:brightness-105 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm"
+              className="flex-1 py-3.5 rounded-3xl bg-white/80 dark:bg-cyan-950/60 border border-cyan-400/40 text-cyan-800 dark:text-cyan-200 font-extrabold text-xs tracking-wider uppercase hover:brightness-105 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm backdrop-blur-md"
             >
-              <FastForward className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-              <span>Đã Đủ Oxy • Nín Thở Ngay</span>
+              <FastForward className="w-4 h-4 text-cyan-500" />
+              <span>Đã Đủ Sinh Khí • Nín Thở</span>
             </button>
             <button
               onClick={resetSession}
-              className="p-3.5 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-red-500 active:scale-95 transition-all shadow-sm"
-              title="Dừng & Làm lại"
+              className="p-3.5 rounded-3xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-400 hover:text-red-500 active:scale-95 transition-all shadow-sm"
+              title="Dừng & Đặt lại"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -436,19 +437,21 @@ const Timer = ({ plan, onOpenPlans, onWorkoutStateChange, onSessionCompleted }) 
           <div className="space-y-2">
             <button
               onClick={endRetentionAndStartRecovery}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 text-white dark:text-black font-extrabold text-base tracking-wider uppercase shadow-xl dark:shadow-ice-glow-lg hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full py-4.5 rounded-3xl bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 text-slate-950 font-black text-base tracking-widest uppercase shadow-2xl dark:shadow-ice-glow-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
             >
+              <Sparkles className="w-5 h-5 text-slate-950 animate-bounce" />
               <span>HẾT KHẢ NĂNG • HÍT VÀO</span>
             </button>
-            <div className="text-center text-[11px] text-slate-500 dark:text-cyan-300/60 font-mono">
-              Thả lỏng tâm trí • Lắng nghe nhịp tim & cơ thể
+            <div className="text-center text-[11px] text-slate-500 dark:text-cyan-300/70 font-sans tracking-widest uppercase flex items-center justify-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-cyan-400 animate-ping" />
+              <span>Lắng nghe nhịp tim & độ tĩnh lặng của tâm thức</span>
             </div>
           </div>
         )}
 
         {phase === 'recovery' && (
-          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 text-center text-xs text-amber-800 dark:text-amber-200 font-bold animate-pulse">
-            Giữ hơi thở căng đầy lồng ngực trong 15 giây...
+          <div className="p-4 rounded-3xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300/60 dark:border-amber-500/40 text-center text-xs text-amber-900 dark:text-amber-200 font-extrabold tracking-wider uppercase animate-pulse shadow-sm backdrop-blur-md">
+            Hít căng tràn lồng ngực và nín lại trong 15 giây...
           </div>
         )}
       </div>
